@@ -8,7 +8,7 @@ const port = process.env.PORT || 5000;
 
 //firebase admin sdk
 
-const serviceAccount = require("./doctors-portal-firebase-admin.json");
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -47,7 +47,6 @@ async function run() {
 
     app.post("/appointments", async (req, res) => {
       const appointment = req.body;
-      console.log(appointment);
       const result = await appointmentsCollection.insertOne(appointment);
       res.json(result);
     });
@@ -74,7 +73,7 @@ async function run() {
 
     app.post("/users", async (req, res) => {
       const user = req.body;
-      console.log(user);
+      //console.log(user);
       const result = await usersCollection.insertOne(user);
       res.json(result);
     });
