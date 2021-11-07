@@ -1,9 +1,18 @@
 const express = require("express");
 require("dotenv").config();
 const { MongoClient } = require("mongodb");
+const admin = require("firebase-admin");
 const app = express();
 const corse = require("cors");
 const port = process.env.PORT || 5000;
+
+//firebase admin sdk
+
+const serviceAccount = require("./doctors-portal-firebase-admin.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 //middleware
 app.use(corse());
@@ -14,6 +23,20 @@ const client = new MongoClient(uri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 });
+
+async function verifyToken(req, res, next) {
+  if (req.headers?.authorization?.startsWith("Bearer ")) {
+    const token = req.headers.authorization.split(" ")[1];
+    try {
+      const decodedUser = await admin.auth().verifyIdToken(token);
+      req.decodedEmail = decodedUser.email;
+    } catch (error) {
+    } finally {
+    }
+  }
+
+  next();
+}
 
 async function run() {
   try {
@@ -29,13 +52,24 @@ async function run() {
       res.json(result);
     });
 
-    app.get("/appointments", async (req, res) => {
+    app.get("/appointments", verifyToken, async (req, res) => {
       const email = req.query.email;
       const date = new Date(req.query.date).toDateString();
       // console.log(email, date);
       const query = { email: email, date: date };
       const appointments = await appointmentsCollection.find(query).toArray();
       res.json(appointments);
+    });
+
+    app.get("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      let isAdmin = false;
+      if (user?.role === "admin") {
+        isAdmin = true;
+      }
+      res.json({ admin: isAdmin });
     });
 
     app.post("/users", async (req, res) => {
@@ -52,8 +86,33 @@ async function run() {
       const updateDoc = {
         $set: user,
       };
-      const result = await usersCollection.updateOne(filter, updateDoc, options);
+      const result = await usersCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
       res.json(result);
+    });
+
+    app.put("/users/admin", verifyToken, async (req, res) => {
+      const user = req.body;
+      const requester = req.decodedEmail;
+
+      if (requester) {
+        const requesterAccount = await usersCollection.findOne({
+          email: requester,
+        });
+        if (requesterAccount?.role === "admin") {
+          const filter = { email: user.email };
+          const updateDoc = {
+            $set: { role: "admin" },
+          };
+          const result = await usersCollection.updateOne(filter, updateDoc);
+          res.json(result);
+        }
+      } else {
+        res.status(401).json({ message: "Unauthorized" });
+      }
     });
   } finally {
     //await client.close();
