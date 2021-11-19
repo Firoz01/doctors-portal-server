@@ -4,6 +4,7 @@ const { MongoClient } = require("mongodb");
 const admin = require("firebase-admin");
 const app = express();
 const corse = require("cors");
+const fileUpload = require("express-fileupload");
 const port = process.env.PORT || 5000;
 
 //firebase admin sdk
@@ -17,6 +18,7 @@ admin.initializeApp({
 //middleware
 app.use(corse());
 app.use(express.json());
+app.use(fileUpload());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.mbv6h.mongodb.net/myFirstDatabase?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, {
@@ -44,6 +46,7 @@ async function run() {
     const database = client.db("doctors_portal");
     const appointmentsCollection = database.collection("appointments");
     const usersCollection = database.collection("users");
+    const doctorsCollection = database.collection("doctors");
 
     app.post("/appointments", async (req, res) => {
       const appointment = req.body;
@@ -71,6 +74,27 @@ async function run() {
       res.json({ admin: isAdmin });
     });
 
+    app.get('/doctors', async (req, res) => {
+      const doctors = await doctorsCollection.find({}).toArray();
+      res.json(doctors);
+    })
+
+    app.post("/doctors", async (req, res) => {
+      const name = req.body.name;
+      const email = req.body.email;
+      const image = req.files.image;
+      const imageData = image.data;
+      const encodedImage = imageData.toString("base64");
+      const imageBuffer = Buffer.from(encodedImage, "base64");
+      const doctor = {
+        name,
+        email,
+        image: imageBuffer,
+      }
+      const result = await doctorsCollection.insertOne(doctor);
+      res.json(result);
+    });
+
     app.post("/users", async (req, res) => {
       const user = req.body;
       //console.log(user);
@@ -96,6 +120,8 @@ async function run() {
     app.put("/users/admin", verifyToken, async (req, res) => {
       const user = req.body;
       const requester = req.decodedEmail;
+
+      console.log(requester);
 
       if (requester) {
         const requesterAccount = await usersCollection.findOne({
